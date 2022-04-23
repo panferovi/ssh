@@ -4,7 +4,9 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#include "init_server.h"
+#include "initserver.h"
+
+static const uint16_t PORT = 55555;
 
 extern void process_user(int sock);
 
@@ -12,14 +14,12 @@ void init_tcp_server()
 {
 	int tcpListener = make_connection(SOCK_STREAM, PORT);
 	init_process(tcpListener, SOCK_STREAM);
-	close(tcpListener);
 }
 
 void init_udp_server()
 {
 	int	udpListener = make_connection(SOCK_DGRAM,  PORT);
 	init_process(udpListener, SOCK_DGRAM);
-	close(udpListener);
 }
 
 int make_connection(int connection, int port)

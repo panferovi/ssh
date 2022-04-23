@@ -12,7 +12,3 @@ char* client_name(char* arg);
 char* dst_path(char* arg);
 
 char* src_path(char* arg);
-
-
-int make_connection(int connection, struct sockaddr_in* sock_info);
-void set_quit(int);
