@@ -8,7 +8,7 @@
 
 int main()
 {
-	pid_t pid = 0;/* fork(); */
+	pid_t pid = fork();
 
 	if (pid == -1)
 	{

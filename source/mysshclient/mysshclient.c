@@ -1,8 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "actions.h"
 #include "parser.h"
 #include "clientactions.h"
-
 
 int main(int argc, char** argv)
 {
@@ -41,7 +41,7 @@ int main(int argc, char** argv)
 	// {
 	// 	// make_broadcast();
 	// }
-	// else sock = make_connection(connection, &sock_info);
+	// else sock = make_connection(connection, &sockinfo);
 
 
 	// // while (1)

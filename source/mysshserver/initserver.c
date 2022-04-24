@@ -6,9 +6,9 @@
 #include <netinet/in.h>
 #include "initserver.h"
 
-static const uint16_t PORT = 55555;
+static const uint16_t PORT = 8080;
 
-extern void process_user(int sock);
+extern void process_client(int sock);
 
 void init_tcp_server()
 {
@@ -83,7 +83,7 @@ void init_process(int listener, int connection)
 				case 0:
 				{
 					close(listener);
-					process_user(sock);
+					process_client(sock);
 					exit(0);
 				}
 				default:
@@ -92,6 +92,6 @@ void init_process(int listener, int connection)
 			close(sock);
 		}
 		else if (connection == SOCK_DGRAM)
-			process_user(listener);
+			process_client(listener);
 	}
 }
