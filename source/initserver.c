@@ -84,12 +84,12 @@ void init_process(int listener, int connection)
 				{
 					close(listener);
 					process_user(sock);
-					close(sock);
 					exit(0);
 				}
 				default:
 					break;
 			}
+			close(sock);
 		}
 		else if (connection == SOCK_DGRAM)
 			process_user(listener);

@@ -86,6 +86,7 @@ int main() {
 		return 1;
 	}
 
+	// sleep(1);
 	wait(NULL);
 
 	ret = read(master, buf, sizeof(buf));

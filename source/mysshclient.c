@@ -1,29 +1,14 @@
-#include <sys/types.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <string.h>
-#include <arpa/inet.h>
-#include <signal.h>
-#include <assert.h>
 #include "actions.h"
 #include "parser.h"
-#include "mysshclient.h"
+#include "clientactions.h"
 
-static const uint16_t PORT = 55555;
-
-char buf[512] = "";
 
 int main(int argc, char** argv)
 {
 	int	connection;
 	in_addr_t ip;
 	char *username = NULL, *dst = NULL, *src = NULL;
-
-	printf("ti che durak blyat\n");
 
 	int client_action = parse(argc - 1, argv + 1, &connection, &ip, &username, &dst, &src);
 
@@ -80,47 +65,4 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-void sh(int connection, int ip, char* username)
-{
-	printf("making connection\n");
-	int sock = 0;
-	struct sockaddr_in sock_info = 
-					make_connection(&sock, connection, ip);
-
-	int action = 42;
-
-	printf("sending message\n");
-	sendto(sock, &action, sizeof(action), MSG_CONFIRM, (struct sockaddr*) &sock_info, sizeof(sock_info));
-	printf("sent\n");
-	close(sock);
-}
-
-void broadcast(int connection, int ip)
-{
-
-}
-
-void copy(int connection, int ip, char* username, char* src, char* dst)
-{
-	
-}
-
-struct sockaddr_in make_connection(int *sock, int connection, int ip)
-{
-	struct sockaddr_in sock_info = { .sin_family = AF_INET,
-									 .sin_port   = htons(PORT),
-									 .sin_addr   = {ip} };
-
-	*sock = socket(AF_INET, connection, 0);
-
-	if (connection == SOCK_STREAM && 
-		connect(*sock, (struct sockaddr*) &sock_info, sizeof(sock_info)) == -1)
-	{
-		perror("connect");
-		exit(-1);
-	}
-
-	return sock_info;
-}
-
-void set_quit(int _) { sprintf(buf, "quit\n"); }
+// /void set_quit(int _) { sprintf(buf, "quit\n"); }

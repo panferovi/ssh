@@ -6,7 +6,7 @@
 #include "initserver.h"
 
 
-void ssh_daemon()
+int main()
 {
 	pid_t pid = 0;/* fork(); */
 
@@ -43,4 +43,5 @@ void ssh_daemon()
 		        init_tcp_server();
 		}
 	}
+	return 0;
 }
