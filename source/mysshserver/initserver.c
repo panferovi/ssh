@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include "initserver.h"
 
@@ -60,13 +61,11 @@ int make_connection(int connection, int port)
 
 void init_process(int listener, int connection)
 {
-	int sock = 0;
-
-	while (1)
+	if (connection == SOCK_STREAM)
 	{
-		if (connection == SOCK_STREAM)
+		while (1)
 		{
-			sock = accept(listener, NULL, NULL);
+			int sock = accept(listener, NULL, NULL);
 
 			if (sock < 0)
 			{
@@ -74,24 +73,43 @@ void init_process(int listener, int connection)
 				exit(-1);
 			}
 
-			switch (fork())
+			switch (0)
+			{
+				case -1:
+					perror("fork");
+					close(listener);
+					close(sock);
+					exit(-1);
+				case 0:
+					close(listener);
+					process_client(sock);
+					close(sock);
+					exit(0);
+				default:
+					close(sock);
+					break;
+			}
+		}
+	}
+	else if (connection == SOCK_DGRAM)
+	{
+		// for (int i = 0; i < 100; ++i)
+		{
+			switch (0)
 			{
 				case -1:
 					perror("fork");
 					close(listener);
 					exit(-1);
 				case 0:
-				{
+					process_client(listener);
 					close(listener);
-					process_client(sock);
 					exit(0);
-				}
 				default:
 					break;
 			}
-			close(sock);
 		}
-		else if (connection == SOCK_DGRAM)
-			process_client(listener);
+		close(listener);
+		wait(NULL);
 	}
 }

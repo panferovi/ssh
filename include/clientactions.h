@@ -8,6 +8,10 @@ void copy(int connection, int ip, char* username, char* src, char* dst);
 
 void send_action(int sock, struct sockaddr_in *sockinfo, int action);
 
+void send_username(int sock, struct sockaddr_in *sockinfo, char* username);
+
+void client_authenticate(int sock, struct sockaddr_in* sockinfo);
+
 struct sockaddr_in make_connection(int *sock, int connection, int ip);
 
 // void set_quit(int _);

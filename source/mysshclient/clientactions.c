@@ -9,7 +9,7 @@
 #include "actions.h"
 #include "clientactions.h"
 
-
+#define BUF_SIZE 4096
 
 static const uint16_t PORT = 8080;
 
@@ -51,27 +51,32 @@ void sh(int connection, int ip, char* username)
 					make_connection(&sock, connection, ip);
 
     send_action(sock, &sockinfo, SH);
+	msgsend(sock, &sockinfo, username, strlen(username));
+	client_authenticate(sock, &sockinfo);
 
-	char buf[1024] = "";
+	char buf[BUF_SIZE] = "";
+
+	printf("\\h:\\w$ ");
 
 	while (1)
 	{
-		printf("mysshclient: ");
-		
-		fgets(buf, 1024, STDIN_FILENO);
+		memset(buf, '\0', BUF_SIZE);
+		fgets(buf, BUF_SIZE, stdin);
 
-		if (sendto(sock, buf, strlen(buf), MSG_CONFIRM, 
-							 (struct sockaddr*) &sockinfo, sizeof(sockinfo)) == -1)
-		{
-			perror("send");
-			exit(-1);
-		}
-	
-		if (recvfrom(sock, buf, strlen(buf), MSG_CONFIRM, NULL, NULL) == -1)
+		msgsend(sock, &sockinfo, buf, strlen(buf));
+
+		if (!strcmp(buf, "exit\n"))
+			break;
+
+		memset(buf, '\0', BUF_SIZE);
+
+		if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
 		{
 			perror("recv");
 			exit(-1);
 		}
+
+		printf("%s", buf);
 	}
 }
 
@@ -80,8 +85,8 @@ void copy(int connection, int ip, char* username, char* src, char* dst)
 	int sock = 0;
 	struct sockaddr_in sockinfo = 
 					make_connection(&sock, connection, ip);
-	
-    send_action(sock, &sockinfo, COPY);	
+
+    send_action(sock, &sockinfo, COPY);
 }
 
 void send_action(int sock, struct sockaddr_in *sockinfo, int action)
@@ -94,6 +99,37 @@ void send_action(int sock, struct sockaddr_in *sockinfo, int action)
         perror("send");
         exit(-1);
     }
+}
+
+void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes)
+{
+    assert (sockinfo != NULL);
+    assert (data 	 != NULL);
+
+	if (sendto(sock, data, nbytes, MSG_CONFIRM, 
+					(struct sockaddr*) sockinfo, sizeof(*sockinfo)) == -1)
+    {
+        perror("send");
+        exit(-1);
+    }
+}
+
+void client_authenticate(int sock, struct sockaddr_in* sockinfo)
+{
+	assert(sockinfo != NULL);
+
+	char buf[BUF_SIZE] = "";
+
+	// if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
+	// {
+	// 	perror("recv");
+	// 	exit(-1);
+	// }
+
+	printf("%s\n", buf);
+	fgets(buf, BUF_SIZE, stdin);
+
+	msgsend(sock, &sockinfo, buf, strlen(buf));
 }
 
 struct sockaddr_in make_connection(int *sock, int connection, int ip)
