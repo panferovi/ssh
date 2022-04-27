@@ -39,7 +39,7 @@ void sh(int sock, struct sockaddr_in* sockinfo)
 	recv_username(sock, sockinfo, buf);
 	
 	struct passwd client = login_client(sock, sockinfo, buf);
-	int master = init_sh(&client);
+	int master = init_sh();
 
 	struct pollfd shfd = {.fd = master, .events = POLLIN};
 
@@ -127,10 +127,8 @@ int recv_sh_cmd(int sock, int master, char* buf)
 	}
 }
 
-int init_sh(struct passwd* client)
+int init_sh()
 {
-	assert(client != NULL);
-
 	char *bash_argv[] = {"sh", NULL};
 	struct termios t;
 	int master;
@@ -169,9 +167,6 @@ int init_sh(struct passwd* client)
 	if (ret == 0) {
 		int term;
 
-		setgid(client->pw_gid);
-		setuid(client->pw_uid);
-
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
 		close(STDERR_FILENO);
@@ -187,12 +182,6 @@ int init_sh(struct passwd* client)
 		dup2(term, STDERR_FILENO);
 
 		close(master);
-
-		if (chdir(client->pw_dir) == -1)
-		{
-			perror("chdir");
-			exit(-1);
-		}
 
 		execvp("sh", bash_argv);
 	}

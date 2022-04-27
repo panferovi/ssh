@@ -13,6 +13,8 @@
 
 static const uint16_t PORT = 8080;
 
+void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);
+
 void broadcast(int connection, int ip)
 {
 	int sock = 0;
@@ -87,6 +89,10 @@ void copy(int connection, int ip, char* username, char* src, char* dst)
 					make_connection(&sock, connection, ip);
 
     send_action(sock, &sockinfo, COPY);
+	msgsend(sock, &sockinfo, username, strlen(username));
+	client_authenticate(sock, &sockinfo);
+
+	
 }
 
 void send_action(int sock, struct sockaddr_in *sockinfo, int action)
@@ -120,16 +126,22 @@ void client_authenticate(int sock, struct sockaddr_in* sockinfo)
 
 	char buf[BUF_SIZE] = "";
 
-	// if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
-	// {
-	// 	perror("recv");
-	// 	exit(-1);
-	// }
-
-	printf("%s\n", buf);
+	printf("Password: ");
 	fgets(buf, BUF_SIZE, stdin);
 
-	msgsend(sock, &sockinfo, buf, strlen(buf));
+	msgsend(sock, sockinfo, buf, strlen(buf));
+	memset(buf, '\0', BUF_SIZE);
+
+	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
+	{
+		perror("recv");
+		exit(-1);
+	}
+
+	printf("%s", buf);
+
+	if (strcmp(buf, "login succesfull\n"))
+		exit(-1);
 }
 
 struct sockaddr_in make_connection(int *sock, int connection, int ip)

@@ -12,6 +12,8 @@ void send_username(int sock, struct sockaddr_in *sockinfo, char* username);
 
 void client_authenticate(int sock, struct sockaddr_in* sockinfo);
 
+void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);
+
 struct sockaddr_in make_connection(int *sock, int connection, int ip);
 
 // void set_quit(int _);

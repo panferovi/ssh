@@ -14,13 +14,41 @@ extern void process_client(int sock);
 void init_tcp_server()
 {
 	int tcpListener = make_connection(SOCK_STREAM, PORT);
-	init_process(tcpListener, SOCK_STREAM);
+
+	while (1)
+	{
+		int sock = accept(tcpListener, NULL, NULL);
+
+		if (sock < 0)
+		{
+			perror("accept");
+			exit(-1);
+		}
+
+		switch (0)
+		{
+			case -1:
+				perror("fork");
+				close(tcpListener);
+				close(sock);
+				exit(-1);
+			case 0:
+				close(tcpListener);
+				process_client(sock);
+				close(sock);
+				exit(0);
+			default:
+				close(sock);
+				break;
+		}
+	}
+	close(tcpListener);
 }
 
 void init_udp_server()
 {
 	int	udpListener = make_connection(SOCK_DGRAM,  PORT);
-	init_process(udpListener, SOCK_DGRAM);
+	close(udpListener);
 }
 
 int make_connection(int connection, int port)
@@ -57,59 +85,4 @@ int make_connection(int connection, int port)
 	}
 
 	return listener;
-}
-
-void init_process(int listener, int connection)
-{
-	if (connection == SOCK_STREAM)
-	{
-		while (1)
-		{
-			int sock = accept(listener, NULL, NULL);
-
-			if (sock < 0)
-			{
-				perror("accept");
-				exit(-1);
-			}
-
-			switch (0)
-			{
-				case -1:
-					perror("fork");
-					close(listener);
-					close(sock);
-					exit(-1);
-				case 0:
-					close(listener);
-					process_client(sock);
-					close(sock);
-					exit(0);
-				default:
-					close(sock);
-					break;
-			}
-		}
-	}
-	else if (connection == SOCK_DGRAM)
-	{
-		// for (int i = 0; i < 100; ++i)
-		{
-			switch (0)
-			{
-				case -1:
-					perror("fork");
-					close(listener);
-					exit(-1);
-				case 0:
-					process_client(listener);
-					close(listener);
-					exit(0);
-				default:
-					break;
-			}
-		}
-		close(listener);
-		wait(NULL);
-	}
 }
