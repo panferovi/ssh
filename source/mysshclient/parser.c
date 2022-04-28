@@ -6,90 +6,91 @@
 #include <arpa/inet.h>
 #include "parser.h"
 #include "actions.h"
+#include "errorhandling.h"
 
-int parse(int argNum, char** args, int* connection, in_addr_t* ip, 
-								   char** username, char** dst, char** src)
+int parse(int argNum, char** args, int* client_acion, int* connection,
+					  in_addr_t* ip, char** username, char** dst, char** src)
 {
 	assert(args != NULL);
 
 	if (argNum < 1 || argNum > 3)
-		return ERR;
-
-	*connection = connection_type(argNum, args);
-
-	if (*connection == -1)
 	{
-		printf("Wrong connection type: use \"TCP\" or \"UDP\"\n");
-		exit(-1);
+		*client_acion = ERR;
+		return 0;
 	}
 
-	*ip = host_ip(argNum, args);
+	TRYEXPR (connection_type(argNum, args, connection),
+		"Wrong connection type: use \"TCP\" or \"UDP\"\n");
 
-	if (*ip == 0)
-	{
-		printf("Wrong ip: usage example \"192.0.2.33\"\n" \
-		 	    "You can use -broadcast to find server ip\n");
-		exit(-1);
-	}
+	TRYEXPR (host_ip(argNum, args, ip),
+		"Wrong ip: usage example \"192.0.2.33\"\n" \
+			"You can use -broadcast to find server ip\n");
 
 	if (argNum == 1)
-		return BROADCAST;
-
-	*username = client_name(args[argNum - 1]);
-
-	if (*username == NULL)
 	{
-		printf("Wrong username: usage example [-t <UDP|TCP>] [<user>@]<IP>");
-		exit(-1);
-	}	
+		*client_acion = BROADCAST;
+		return 0;
+	}
+
+	TRYEXPR (client_name(args[argNum - 1], username),
+		"Wrong username: usage example [-t <UDP|TCP>] [<user>@]<IP>\n");
 
 	if (argNum == 3)
-		return SH;
+	{
+		*client_acion = SH;
+		return 0;
+	}
 
-	*src = src_path(args[0]);
-	*dst = dst_path(args[1]);
+	TRY (src_path(args[0], src));
+	TRY (dst_path(args[1], dst));
 	*connection = SOCK_STREAM;
 
 	if (*src == NULL || *dst == NULL)
 	{
-		printf("Wrong path: usage example /path/to/src user@10.35.57.4:/path/to/dst");
-		exit(-1);
+		log_error("Wrong path: usage example /path/to/src user@10.35.57.4:/path/to/dst\n");
+		return -1;
 	}	
 
-	return COPY;
+	*client_acion = COPY;
+	return 0;
 }
 
-int connection_type(int argNum, char** args)
+int connection_type(int argNum, char** args, int* connection)
 {
 	assert(args != NULL);
 
 	if (argNum > 1 && !strcmp(args[0], "-t"))
 	{
 		if (!strcmp(args[1], "TCP"))
-			return SOCK_STREAM;
+			*connection = SOCK_STREAM;
 		else if (!strcmp(args[1], "UDP"))
-			return SOCK_DGRAM;
+			*connection = SOCK_DGRAM;
 		else
 			return -1;
 	}
-	return SOCK_DGRAM;
+	else *connection = SOCK_DGRAM;
+
+	return 0;
 }
 
-in_addr_t host_ip(int argNum, char** args)
+int host_ip(int argNum, char** args, in_addr_t* ip)
 {
 	assert(args != NULL);
 
 	if (argNum == 1 && !strcmp(args[0], "-broadcast"))
-		return htonl(INADDR_BROADCAST);
+	{
+		*ip = htonl(INADDR_BROADCAST);
+		return 0;
+	}
 	else if (argNum == 2 || argNum == 3)
 	{
 		char* ip_begin = strchr(args[argNum - 1], '@');
 
 		if (ip_begin == NULL)
 		{
-			printf("Could not resolve hostname %s: " 
-				   "Name or service not known\n", args[argNum - 1]);
-			exit(-1);
+			log_error("Could not resolve hostname %s: " 
+				   	  "Name or service not known\n", args[argNum - 1]);
+			return -1;
 		}
 		
 		ip_begin++;
@@ -101,9 +102,9 @@ in_addr_t host_ip(int argNum, char** args)
 
 			if (ip_end == NULL)
 			{
-				printf("Could not resolve comand: usage example " \
-					   "/path/to/file [<user>@]<IP>:/path/to/file\n");
-				exit(-1);
+				log_error("Could not resolve comand: usage example " \
+					      "/path/to/file [<user>@]<IP>:/path/to/file\n");
+				return -1;
 			}
 
 			size_t ip_len = ip_end - ip_begin;
@@ -111,56 +112,75 @@ in_addr_t host_ip(int argNum, char** args)
 			memcpy(ip_str, ip_begin, ip_len);
 		}
 
-		struct in_addr ip;
-
-		if (inet_pton(AF_INET, ip_str, &ip) == 0)
+		if (inet_pton(AF_INET, ip_str, ip) == 0)
 		{
-			printf("Could not resolve hostname %s: " 
-			"Name or service not known\n", ip_str);
+			log_error("Could not resolve hostname %s: " 
+			 		   "Name or service not known\n", ip_str);
 
 			free(ip_str);
-			exit(-1);
+			return -1;
 		}
 
 		if (argNum == 2)
 			free(ip_str);
 
-		return ip.s_addr;
+		return 0;
 	}
 
-	return 0;
+	return -1;
 }
 
-char* client_name(char* arg)
+int client_name(char* arg, char** username)
 {
 	assert(arg != NULL);
 
 	char* username_end  = strchr(arg, '@');
 	size_t username_len = username_end - arg;
 
-	char* username = calloc(username_len + 1, sizeof(char));
-
+	*username = calloc(username_len + 1, sizeof(char));
+	
+	if (*username == NULL)
+	{
+		log_perror();
+		return -1;
+	}
+	
 	memcpy(username, arg, username_len);
-	return username;
+
+	return 0;
 }
 
-char* dst_path(char* arg)
+int dst_path(char* arg, char** dst)
 {
 	assert(arg != NULL);
 
-	char* dst_start  = strchr(arg, ':') + 1;
-	char* dst = calloc(strlen(dst_start) + 1, sizeof(char));
+	char* dst_start = strchr(arg, ':') + 1;
+	*dst = calloc(strlen(dst_start) + 1, sizeof(char));
+
+	if (*dst == NULL)
+	{
+		log_perror();
+		return -1;
+	}
 
 	memcpy(dst, dst_start, strlen(dst_start));
-	return dst;
+
+	return 0;
 }
 
-char* src_path(char* arg)
+int src_path(char* arg, char** src)
 {
 	assert(arg != NULL);
 
-	char* src = calloc(strlen(arg) + 1, sizeof(char));
+	*src = calloc(strlen(arg) + 1, sizeof(char));
+
+	if (*src == NULL)
+	{
+		log_perror();
+		return -1;
+	}
+
 	memcpy(src, arg, strlen(arg));
 
-	return src;
+	return 0;
 }

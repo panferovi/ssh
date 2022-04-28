@@ -16,32 +16,34 @@
 #include <sys/wait.h>
 #include "serveractions.h"
 #include "actions.h"
+#include "errorhandling.h"
 
-extern struct passwd login_client(int sock, struct sockaddr_in* sockinfo, char* username);
+extern int login_client(int sock, struct sockaddr_in* sockinfo, 
+								  struct passwd* client, char* username);
 
 #define BUF_SIZE 4096
 
-void broadcast(int sock, struct sockaddr_in *sockinfo)
+int broadcast(int sock, struct sockaddr_in *sockinfo)
 {
     int action = BROADCAST;
 
-	if (sendto(sock, &action, sizeof(action), MSG_CONFIRM, 
-              (struct sockaddr*) sockinfo, sizeof(struct sockaddr_in)) == -1)
-	{
-		perror("sendto");
-		exit(-1);
-	}
+	TRY (sendto(sock, &action, sizeof(action), MSG_CONFIRM, 
+              (struct sockaddr*) sockinfo, sizeof(struct sockaddr_in)));
+
+	return 0;
 }
 
-void sh(int sock, struct sockaddr_in* sockinfo)
+int sh(int sock, struct sockaddr_in* sockinfo)
 {
 	char buf[BUF_SIZE] = "";
 
-	// get username
-	msgrecv(sock, buf);
-	struct passwd client = login_client(sock, sockinfo, buf);
-	
-	int master = init_sh();
+	TRY (msgrecv(sock, buf));
+
+	struct passwd client = {};
+	TRY (login_client(sock, sockinfo, &client, buf));
+
+	int master = 0;
+	TRY (init_sh(&master));
 
 	struct pollfd shfd = {.fd = master, .events = POLLIN};
 
@@ -50,25 +52,24 @@ void sh(int sock, struct sockaddr_in* sockinfo)
 		if (recv_sh_cmd(sock, master, buf) == 0)
 			break;
 
-		send_sh_res(sock, sockinfo, &shfd, buf);
+		TRY (send_sh_res(sock, sockinfo, &shfd, buf));
 	}
+
+	return 0;
 }
 
-void msgrecv(int sock, char* buf)
+int msgrecv(int sock, char* buf)
 {
 	assert(buf != NULL);
 
 	memset(buf, '\0', BUF_SIZE);
+	TRY (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL));
 
-	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
-	{
-		perror("recvfrom");
-		exit(-1);
-	}
+	return 0;
 }
 
-void send_sh_res(int sock, struct sockaddr_in* sockinfo, 
-						   struct pollfd* shfd, char* buf)
+int send_sh_res(int sock, struct sockaddr_in* sockinfo, 
+						  struct pollfd* shfd, char* buf)
 {
 	assert(sockinfo != NULL);
 	assert(shfd 	!= NULL);
@@ -86,33 +87,27 @@ void send_sh_res(int sock, struct sockaddr_in* sockinfo,
 			int ret = read(shfd->fd, buf, BUF_SIZE);
 			if (ret == -1)
 			{
-				perror("write");
-				exit(-1);
+				log_perror();
+				return -1;
 			}
 			memcpy(output + offset, buf, ret);
 			offset += ret;
 		}
 	}
 
-	if (sendto(sock, output, strlen(output), MSG_CONFIRM, 
-				(struct sockaddr*) sockinfo, sizeof(struct sockaddr_in)) == -1)
-	{
-		perror("recvfrom");
-		exit(-1);
-	}
+	TRY (sendto(sock, output, strlen(output), MSG_CONFIRM, 
+				(struct sockaddr*) sockinfo, sizeof(struct sockaddr_in)));
+
+	return 0;
 }
 
 int recv_sh_cmd(int sock, int master, char* buf)
 {
 	assert(buf != NULL);
 
-	msgrecv(sock, buf);
+	TRY (msgrecv(sock, buf));
 
-	if (write(master, buf, BUF_SIZE) == -1)
-	{
-		perror("write");
-		exit(-1);
-	}
+	TRY (write(master, buf, BUF_SIZE))
 
 	if (!strcmp(buf, "exit\n"))
 	{
@@ -120,90 +115,77 @@ int recv_sh_cmd(int sock, int master, char* buf)
 		return 0;
 	}
 
-	// return 1;
+	return 0;
 }
 
-int init_sh()
+int init_sh(int* master)
 {
+	assert(master != NULL);
+
 	char *bash_argv[] = {"sh", NULL};
 	struct termios t;
-	int master;
-	int ret;
 
-	master = posix_openpt(O_RDWR | O_NOCTTY);
-	if (master < 0) {
-		perror("openpt");
-		exit(-1);
+	*master = posix_openpt(O_RDWR | O_NOCTTY);
+	
+	if (*master < 0) {
+		log_error("openpt");
+		return -1;
 	}
 
-	if (grantpt(master)) {
-		perror("grantpt");
-		exit(-1);
-	}
-
-	if (unlockpt(master)) {
-		perror("unlockpt");
-		exit(-1);
-	}
-
-	if (tcgetattr(master, &t)) {
-		perror("tcgetattr");
-		exit(-1);
-	}
+	TRY (grantpt(*master));
+	TRY (unlockpt(*master));
+	TRY (tcgetattr(*master, &t));
 
 	cfmakeraw(&t);
 
-	ret = tcsetattr(master, TCSANOW, &t);
-	if (ret) {
-		perror("tcsetattr");
-		exit(-1);
-	}
+	TRY (tcsetattr(*master, TCSANOW, &t))
 
-	ret = fork();
-	if (ret == 0) {
-		int term;
-
+	if (fork() == 0)
+	{
 		close(STDIN_FILENO);
 		close(STDOUT_FILENO);
 		close(STDERR_FILENO);
 
-		term = open(ptsname(master), O_RDWR);
-		if (term < 0) {
-			perror("open slave term");
-			exit(1);
+		int term = open(ptsname(*master), O_RDWR);
+
+		if (term < 0) 
+		{
+			log_error("open slave term");
+			return -1;
 		}
 
 		dup2(term, STDIN_FILENO);
 		dup2(term, STDOUT_FILENO);
 		dup2(term, STDERR_FILENO);
 
-		close(master);
+		close(*master);
 
 		execvp("sh", bash_argv);
 	}
 
-	return master;
+	return 0;
 }
 
-void copy(int sock, struct sockaddr_in* sockinfo)
+int copy(int sock, struct sockaddr_in* sockinfo)
 {
 	char buf[BUF_SIZE] = "";
 
 	//get username
 	msgrecv(sock, buf);
-	struct passwd client = login_client(sock, sockinfo, buf);
+	struct passwd client;
+	TRY (login_client(sock, sockinfo, &client, buf));
 
 	//get path
-	msgrecv(sock, buf);
+	TRY (msgrecv(sock, buf));
 	mode_t dstmode;
-	recv_fmode(sock, &dstmode);
+	TRY (recv_fmode(sock, &dstmode));
 
 	int dstfd = open(buf, O_CREAT | O_TRUNC | O_WRONLY, dstmode);
 
 	if (dstfd == -1)
 	{
-		perror("open");
-		exit(-1);
+		log_perror();
+		return -1;
 	}
 
     int rbytes = 0;
@@ -217,15 +199,17 @@ void copy(int sock, struct sockaddr_in* sockinfo)
 			write(dstfd, buf, rbytes);
 		}
 	}
+
+	close(dstfd);
+
+	return 0;
 }
 
-void recv_fmode(int sock, mode_t* fmode)
+int recv_fmode(int sock, mode_t* fmode)
 {
 	assert(fmode != NULL);
 
-	if (recvfrom(sock, fmode, sizeof(*fmode), MSG_CONFIRM, NULL, NULL) == -1)
-	{
-		perror("recvfrom");
-		exit(-1);
-	}
+	TRY (recvfrom(sock, fmode, sizeof(*fmode), MSG_CONFIRM, NULL, NULL));
+
+	return 0;
 }

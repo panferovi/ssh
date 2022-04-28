@@ -1,14 +1,16 @@
+#pragma once
+
 #include <netinet/in.h>
 
-int parse(int argNum, char** args, int* connection, in_addr_t* ip, 
-                                   char** username, char** dst, char** src);
+int parse(int argNum, char** args, int* client_acion, int* connection,
+					  in_addr_t* ip, char** username, char** dst, char** src);
 
-int connection_type(int argNum, char** args);
+int connection_type(int argNum, char** args, int* connection);
 
-in_addr_t host_ip(int argNum, char** args);
+int host_ip(int argNum, char** args, in_addr_t* ip);
 
-char* client_name(char* arg);
+int client_name(char* arg, char** username);
 
-char* dst_path(char* arg);
+int dst_path(char* arg, char** dst);
 
-char* src_path(char* arg);
+int src_path(char* arg, char** src);

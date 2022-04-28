@@ -1,35 +1,36 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "actions.h"
-#include "parser.h"
-#include "clientactions.h"
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-
+#include "actions.h"
+#include "parser.h"
+#include "logging.h"
+#include "clientactions.h"
+#include "errorhandling.h"
 
 int main(int argc, char** argv)
 {
-	int	connection;
+	int	client_action, connection;
 	in_addr_t ip;
 	char *username = NULL, *dst = NULL, *src = NULL;
 
-	int client_action = parse(argc - 1, argv + 1, 
-							  &connection, &ip, &username, &dst, &src);
+	TRY (parse(argc - 1, argv + 1, &client_action,
+					&connection, &ip, &username, &dst, &src));
 
 	switch (client_action)
 	{
 		case BROADCAST:
-			broadcast(connection, ip);
+			TRY (broadcast(connection, ip));
 			break;
 		case SH:
-			sh(connection, ip, username);
+			TRY (sh(connection, ip, username));
 			break;
 		case COPY:
-			copy(connection, ip, username, src, dst);
+			TRY (copy(connection, ip, username, src, dst));
 			break;
 		case ERR:
-			printf("Could not resolve hostname: Name or service not known\n");
+			log_error("Could not resolve hostname: Name or service not known\n");
 			break;
 	}
 
@@ -39,5 +40,3 @@ int main(int argc, char** argv)
 
 	return 0;
 }
-
-// /void set_quit(int _) { sprintf(buf, "quit\n"); }

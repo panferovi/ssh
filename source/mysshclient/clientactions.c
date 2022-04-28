@@ -12,27 +12,25 @@
 #include <arpa/inet.h>
 #include "actions.h"
 #include "clientactions.h"
+#include "errorhandling.h"
+#include "logging.h"
 
 #define BUF_SIZE 4096
 
 static const uint16_t PORT = 8080;
 
-void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);
-
-void broadcast(int connection, int ip)
+int broadcast(int connection, int ip)
 {
 	int sock = 0;
-	struct sockaddr_in sockinfo = 
-					make_connection(&sock, connection, ip);
+	struct sockaddr_in sockinfo = {};
+
+	TRYEXPR(make_connection(&sock, &sockinfo, connection, ip),
+			"Couldn't make connection\n")
 
     int opt = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)) == -1)
-	{
-		perror("setsockopt");
-		exit(-1);
-	}
+	TRY (setsockopt(sock, SOL_SOCKET, SO_BROADCAST, &opt, sizeof(opt)))
 	
-    send_action(sock, &sockinfo, BROADCAST);
+    TRY (send_action(sock, &sockinfo, BROADCAST))
 
 	struct sockaddr_in server_info;
 	socklen_t len = sizeof(server_info);
@@ -50,18 +48,21 @@ void broadcast(int connection, int ip)
 	}
 
 	close(sock);
+	return 0;
 }
 
-void sh(int connection, int ip, char* username)
+int sh(int connection, int ip, char* username)
 {
 	int sock = 0;
-	struct sockaddr_in sockinfo = 
-					make_connection(&sock, connection, ip);
+	struct sockaddr_in sockinfo = {};
 
-    send_action(sock, &sockinfo, SH);
+	TRYEXPR(make_connection(&sock, &sockinfo, connection, ip),
+			"Couldn't make connection\n");
 
-	msgsend(sock, &sockinfo, username, strlen(username));
-	client_authenticate(sock, &sockinfo);
+    TRY (send_action(sock, &sockinfo, SH));
+	TRY (msgsend(sock, &sockinfo, username, strlen(username)));
+
+	TRY (client_authenticate(sock, &sockinfo));
 
 	struct termios term;
 	tcgetattr(STDIN_FILENO, &term);
@@ -76,39 +77,37 @@ void sh(int connection, int ip, char* username)
 	while (1)
 	{
 		memset(buf, '\0', BUF_SIZE);
-
 		fgets(buf, BUF_SIZE, stdin);
 
-		msgsend(sock, &sockinfo, buf, strlen(buf));
+		TRY (msgsend(sock, &sockinfo, buf, strlen(buf)));
 
 		if (!strcmp(buf, "exit\n"))
 			break;
 
 		memset(buf, '\0', BUF_SIZE);
 
-		if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
-		{
-			perror("recv");
-			exit(-1);
-		}
+		TRY (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL));
 
 		printf("%s", buf);
 	}
 	close(sock);
+	return 0;
 }
 
-void copy(int connection, int ip, char* username, char* src, char* dst)
+int copy(int connection, int ip, char* username, char* src, char* dst)
 {
 	int sock = 0;
-	struct sockaddr_in sockinfo = 
-					make_connection(&sock, connection, ip);
+	struct sockaddr_in sockinfo = {};
+	
+	TRYEXPR(make_connection(&sock, &sockinfo, connection, ip),
+			"Couldn't make connection\n");
 
-    send_action(sock, &sockinfo, COPY);
+    TRY (send_action(sock, &sockinfo, COPY));
 
-	msgsend(sock, &sockinfo, username, strlen(username));
-	client_authenticate(sock, &sockinfo);
+	TRY (msgsend(sock, &sockinfo, username, strlen(username)));
+	TRY (client_authenticate(sock, &sockinfo));
 
-	msgsend(sock, &sockinfo, dst, strlen(dst));
+	TRY (msgsend(sock, &sockinfo, dst, strlen(dst)));
 
 	char buf[BUF_SIZE] = "";
 	int srcfd = open(src, O_RDONLY);
@@ -116,18 +115,14 @@ void copy(int connection, int ip, char* username, char* src, char* dst)
 	if (srcfd == -1)
 	{
 		perror("fstat");
-		exit(-1);
+		return -1;
 	}
 
 	struct stat srcinfo;
 
-	if (fstat(srcfd, &srcinfo) == -1)
-	{
-		perror("fstat");
-		exit(-1);
-	}
+	TRY (fstat(srcfd, &srcinfo));
 
-	send_fstat(sock, &sockinfo, srcinfo.st_mode);
+	TRY (send_fstat(sock, &sockinfo, srcinfo.st_mode));
 
 	while(1)
 	{
@@ -137,54 +132,46 @@ void copy(int connection, int ip, char* username, char* src, char* dst)
 		if (rbytes == -1)
 		{
 			perror("read");
-			exit(-1);
+			return -1;
 		}
 		else if (rbytes == 0)
 			break;
 
-		msgsend(sock, &sockinfo, buf, rbytes);
+		TRY (msgsend(sock, &sockinfo, buf, rbytes));
 	}
 	close(sock);
+	return 0;
 }
 
-void send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode)
+int send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode)
 {
-    assert (sockinfo != NULL);
+    assert(sockinfo != NULL);
 
-    if (sendto(sock, &fmode, sizeof(fmode), MSG_CONFIRM,
-					(struct sockaddr*) sockinfo, sizeof(*sockinfo)) == -1)
-    {
-        perror("send");
-        exit(-1);
-    }
+    TRY (sendto(sock, &fmode, sizeof(fmode), MSG_CONFIRM,
+					(struct sockaddr*) sockinfo, sizeof(*sockinfo)));
+	return 0;
 }
 
-void send_action(int sock, struct sockaddr_in *sockinfo, int action)
+int send_action(int sock, struct sockaddr_in *sockinfo, int action)
 {
-    assert (sockinfo != NULL);
+    assert(sockinfo != NULL);
 
-    if (sendto(sock, &action, sizeof(action), MSG_CONFIRM, 
-                              (struct sockaddr*) sockinfo, sizeof(*sockinfo)) == -1)
-    {
-        perror("send");
-        exit(-1);
-    }
+    TRY (sendto(sock, &action, sizeof(action), MSG_CONFIRM, 
+                              (struct sockaddr*) sockinfo, sizeof(*sockinfo)));
+	return 0;
 }
 
-void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes)
+int msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes)
 {
-    assert (sockinfo != NULL);
-    assert (data 	 != NULL);
+    assert(sockinfo != NULL);
+    assert(data 	!= NULL);
 
-	if (sendto(sock, data, nbytes, MSG_CONFIRM, 
-					(struct sockaddr*) sockinfo, sizeof(*sockinfo)) == -1)
-    {
-        perror("send");
-        exit(-1);
-    }
+	TRY (sendto(sock, data, nbytes, MSG_CONFIRM, 
+					(struct sockaddr*) sockinfo, sizeof(*sockinfo)));
+	return 0;
 }
 
-void client_authenticate(int sock, struct sockaddr_in* sockinfo)
+int client_authenticate(int sock, struct sockaddr_in* sockinfo)
 {
 	assert(sockinfo != NULL);
 
@@ -193,39 +180,32 @@ void client_authenticate(int sock, struct sockaddr_in* sockinfo)
 	printf("Password: ");
 	fgets(buf, BUF_SIZE, stdin);
 
-	msgsend(sock, sockinfo, buf, strlen(buf));
+	TRY (msgsend(sock, sockinfo, buf, strlen(buf)));
 	memset(buf, '\0', BUF_SIZE);
 
-	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
-	{
-		perror("recv");
-		exit(-1);
-	}
-
+	TRY (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL))
 
 	if (strcmp(buf, "login succesfull\n"))
 	{
 		printf("%s", buf);
-		exit(-1);
+		return -1;
 	}
+
+	return 0;
 }
 
-struct sockaddr_in make_connection(int *sock, int connection, int ip)
+int make_connection(int *sock, struct sockaddr_in* sockinfo, int connection, int ip)
 {
     assert (sock != NULL);
 
-	struct sockaddr_in sockinfo = { .sin_family = AF_INET,
-									 .sin_port   = htons(PORT),
-									 .sin_addr   = {ip} };
+	sockinfo->sin_family 	  = AF_INET,
+	sockinfo->sin_port   	  = htons(PORT),
+	sockinfo->sin_addr.s_addr = ip;
 
 	*sock = socket(AF_INET, connection, 0);
 
-	if (connection == SOCK_STREAM && 
-		connect(*sock, (struct sockaddr*) &sockinfo, sizeof(sockinfo)) == -1)
-	{
-		perror("connect");
-		exit(-1);
-	}
+	if (connection == SOCK_STREAM)
+		TRY (connect(*sock, (struct sockaddr*) &sockinfo, sizeof(sockinfo)))
 
-	return sockinfo;
+	return 0;
 }

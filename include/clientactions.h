@@ -1,21 +1,23 @@
+#pragma once
+
 #include <netinet/in.h>
 
-void sh(int connection, int ip, char* username);
+int broadcast(int connection, int ip);
 
-void broadcast(int connection, int ip);
+int sh(int connection, int ip, char* username);
 
-void copy(int connection, int ip, char* username, char* src, char* dst);
+int broadcast(int connection, int ip);
 
-void send_action(int sock, struct sockaddr_in *sockinfo, int action);
+int copy(int connection, int ip, char* username, char* src, char* dst);
 
-void send_username(int sock, struct sockaddr_in *sockinfo, char* username);
+int msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);
 
-void send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode);
+int send_action(int sock, struct sockaddr_in *sockinfo, int action);
 
-void client_authenticate(int sock, struct sockaddr_in* sockinfo);
+int send_username(int sock, struct sockaddr_in *sockinfo, char* username);
 
-void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);
+int send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode);
 
-struct sockaddr_in make_connection(int *sock, int connection, int ip);
+int client_authenticate(int sock, struct sockaddr_in* sockinfo);
 
-// void set_quit(int _);
+int make_connection(int *sock, struct sockaddr_in* sockinfo, int connection, int ip);

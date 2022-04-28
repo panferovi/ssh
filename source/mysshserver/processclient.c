@@ -10,10 +10,11 @@
 #include <assert.h>
 #include "actions.h"
 #include "serveractions.h"
+#include "errorhandling.h"
 
 int recv_action(int sock, struct sockaddr_in *sockinfo);
 
-void process_client(int sock)
+int process_client(int sock)
 {
 	struct sockaddr_in sockinfo = {};
 
@@ -31,9 +32,10 @@ void process_client(int sock)
 			copy(sock, &sockinfo);
 			break;
 		default:
-			printf("Error: unexpected action\n");
-			exit(-1);
+			log_error("Error: unexpected action\n");
+			return -1;
 	}
+	return 0;
 }
 
 int recv_action(int sock, struct sockaddr_in *sockinfo)
@@ -43,12 +45,8 @@ int recv_action(int sock, struct sockaddr_in *sockinfo)
 	int action = 0;
 	socklen_t len = sizeof(struct sockaddr_in);
 
-	if (recvfrom(sock, &action, sizeof(action), MSG_CONFIRM, 
-								(struct sockaddr*) sockinfo, &len) == -1)
-	{
-		perror("recvfrom");
-		exit(-1);
-	}
+	TRY (recvfrom(sock, &action, sizeof(action), MSG_CONFIRM, 
+								(struct sockaddr*) sockinfo, &len));
 
 	return action;
 }
