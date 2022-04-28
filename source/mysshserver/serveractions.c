@@ -12,9 +12,10 @@
 #include <termios.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <time.h>
 #include <sys/wait.h>
-#include "actions.h"
 #include "serveractions.h"
+#include "actions.h"
 
 extern struct passwd login_client(int sock, struct sockaddr_in* sockinfo, char* username);
 
@@ -36,9 +37,10 @@ void sh(int sock, struct sockaddr_in* sockinfo)
 {
 	char buf[BUF_SIZE] = "";
 
-	recv_username(sock, sockinfo, buf);
-	
+	// get username
+	msgrecv(sock, buf);
 	struct passwd client = login_client(sock, sockinfo, buf);
+	
 	int master = init_sh();
 
 	struct pollfd shfd = {.fd = master, .events = POLLIN};
@@ -52,15 +54,13 @@ void sh(int sock, struct sockaddr_in* sockinfo)
 	}
 }
 
-void recv_username(int sock, struct sockaddr_in *sockinfo, char* buf)
+void msgrecv(int sock, char* buf)
 {
-	assert(sockinfo != NULL);
 	assert(buf != NULL);
 
-	socklen_t len = sizeof(struct sockaddr_in);
+	memset(buf, '\0', BUF_SIZE);
 
-	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, 
-								(struct sockaddr*) sockinfo, &len) == -1)
+	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
 	{
 		perror("recvfrom");
 		exit(-1);
@@ -106,13 +106,7 @@ int recv_sh_cmd(int sock, int master, char* buf)
 {
 	assert(buf != NULL);
 
-	memset(buf, '\0', BUF_SIZE);
-
-	if (recvfrom(sock, buf, BUF_SIZE, MSG_CONFIRM, NULL, NULL) == -1)
-	{
-		perror("recvfrom");
-		exit(-1);
-	}
+	msgrecv(sock, buf);
 
 	if (write(master, buf, BUF_SIZE) == -1)
 	{
@@ -125,6 +119,8 @@ int recv_sh_cmd(int sock, int master, char* buf)
 		wait(NULL);
 		return 0;
 	}
+
+	// return 1;
 }
 
 int init_sh()
@@ -191,5 +187,45 @@ int init_sh()
 
 void copy(int sock, struct sockaddr_in* sockinfo)
 {
-    
+	char buf[BUF_SIZE] = "";
+
+	//get username
+	msgrecv(sock, buf);
+	struct passwd client = login_client(sock, sockinfo, buf);
+
+	//get path
+	msgrecv(sock, buf);
+	mode_t dstmode;
+	recv_fmode(sock, &dstmode);
+
+	int dstfd = open(buf, O_CREAT | O_TRUNC | O_WRONLY, dstmode);
+
+	if (dstfd == -1)
+	{
+		perror("open");
+		exit(-1);
+	}
+
+    int rbytes = 0;
+	time_t start = clock();
+
+	while (clock() - start < CLOCKS_PER_SEC / 10)
+	{
+		if ((rbytes = recvfrom(sock, buf, BUF_SIZE, MSG_DONTWAIT, NULL, NULL)) != -1)
+		{
+			start = clock();
+			write(dstfd, buf, rbytes);
+		}
+	}
+}
+
+void recv_fmode(int sock, mode_t* fmode)
+{
+	assert(fmode != NULL);
+
+	if (recvfrom(sock, fmode, sizeof(*fmode), MSG_CONFIRM, NULL, NULL) == -1)
+	{
+		perror("recvfrom");
+		exit(-1);
+	}
 }

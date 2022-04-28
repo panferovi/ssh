@@ -1,3 +1,6 @@
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <netdb.h>
@@ -5,6 +8,7 @@
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
+#include <termios.h>
 #include <arpa/inet.h>
 #include "actions.h"
 #include "clientactions.h"
@@ -44,6 +48,8 @@ void broadcast(int connection, int ip)
 			printf("Server found IP %s\n", sock_ip);
 		}
 	}
+
+	close(sock);
 }
 
 void sh(int connection, int ip, char* username)
@@ -53,8 +59,15 @@ void sh(int connection, int ip, char* username)
 					make_connection(&sock, connection, ip);
 
     send_action(sock, &sockinfo, SH);
+
 	msgsend(sock, &sockinfo, username, strlen(username));
 	client_authenticate(sock, &sockinfo);
+
+	struct termios term;
+	tcgetattr(STDIN_FILENO, &term);
+	term.c_cc[VINTR] = 0;
+	term.c_cc[VSUSP] = 0;
+	tcsetattr(STDIN_FILENO, TCSANOW, &term);
 
 	char buf[BUF_SIZE] = "";
 
@@ -63,6 +76,7 @@ void sh(int connection, int ip, char* username)
 	while (1)
 	{
 		memset(buf, '\0', BUF_SIZE);
+
 		fgets(buf, BUF_SIZE, stdin);
 
 		msgsend(sock, &sockinfo, buf, strlen(buf));
@@ -80,6 +94,7 @@ void sh(int connection, int ip, char* username)
 
 		printf("%s", buf);
 	}
+	close(sock);
 }
 
 void copy(int connection, int ip, char* username, char* src, char* dst)
@@ -89,10 +104,59 @@ void copy(int connection, int ip, char* username, char* src, char* dst)
 					make_connection(&sock, connection, ip);
 
     send_action(sock, &sockinfo, COPY);
+
 	msgsend(sock, &sockinfo, username, strlen(username));
 	client_authenticate(sock, &sockinfo);
 
-	
+	msgsend(sock, &sockinfo, dst, strlen(dst));
+
+	char buf[BUF_SIZE] = "";
+	int srcfd = open(src, O_RDONLY);
+
+	if (srcfd == -1)
+	{
+		perror("fstat");
+		exit(-1);
+	}
+
+	struct stat srcinfo;
+
+	if (fstat(srcfd, &srcinfo) == -1)
+	{
+		perror("fstat");
+		exit(-1);
+	}
+
+	send_fstat(sock, &sockinfo, srcinfo.st_mode);
+
+	while(1)
+	{
+		memset(buf, '\0', BUF_SIZE);
+		int rbytes = read(srcfd, buf, BUF_SIZE);
+
+		if (rbytes == -1)
+		{
+			perror("read");
+			exit(-1);
+		}
+		else if (rbytes == 0)
+			break;
+
+		msgsend(sock, &sockinfo, buf, rbytes);
+	}
+	close(sock);
+}
+
+void send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode)
+{
+    assert (sockinfo != NULL);
+
+    if (sendto(sock, &fmode, sizeof(fmode), MSG_CONFIRM,
+					(struct sockaddr*) sockinfo, sizeof(*sockinfo)) == -1)
+    {
+        perror("send");
+        exit(-1);
+    }
 }
 
 void send_action(int sock, struct sockaddr_in *sockinfo, int action)
@@ -138,10 +202,12 @@ void client_authenticate(int sock, struct sockaddr_in* sockinfo)
 		exit(-1);
 	}
 
-	printf("%s", buf);
 
 	if (strcmp(buf, "login succesfull\n"))
+	{
+		printf("%s", buf);
 		exit(-1);
+	}
 }
 
 struct sockaddr_in make_connection(int *sock, int connection, int ip)

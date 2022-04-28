@@ -48,6 +48,7 @@ int parse(int argNum, char** args, int* connection, in_addr_t* ip,
 
 	*src = src_path(args[0]);
 	*dst = dst_path(args[1]);
+	*connection = SOCK_STREAM;
 
 	if (*src == NULL || *dst == NULL)
 	{
@@ -118,7 +119,6 @@ in_addr_t host_ip(int argNum, char** args)
 			"Name or service not known\n", ip_str);
 
 			free(ip_str);
-
 			exit(-1);
 		}
 

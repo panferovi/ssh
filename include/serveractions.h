@@ -8,7 +8,9 @@ void sh(int sock, struct sockaddr_in *sockinfo);
 
 void copy(int sock, struct sockaddr_in *sockinfo);
 
-void recv_username(int sock, struct sockaddr_in *sockinfo, char* buf);
+void msgrecv(int sock, char* buf);
+
+void recv_fmode(int sock, mode_t* fmode);
 
 int recv_sh_cmd(int sock, int master, char* buf);
 

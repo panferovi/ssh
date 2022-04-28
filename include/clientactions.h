@@ -10,6 +10,8 @@ void send_action(int sock, struct sockaddr_in *sockinfo, int action);
 
 void send_username(int sock, struct sockaddr_in *sockinfo, char* username);
 
+void send_fstat(int sock, struct sockaddr_in *sockinfo, mode_t fmode);
+
 void client_authenticate(int sock, struct sockaddr_in* sockinfo);
 
 void msgsend(int sock, struct sockaddr_in *sockinfo, char* data, int nbytes);

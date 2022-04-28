@@ -3,6 +3,10 @@
 #include "actions.h"
 #include "parser.h"
 #include "clientactions.h"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 
 int main(int argc, char** argv)
 {
@@ -11,7 +15,7 @@ int main(int argc, char** argv)
 	char *username = NULL, *dst = NULL, *src = NULL;
 
 	int client_action = parse(argc - 1, argv + 1, 
-								&connection, &ip, &username, &dst, &src);
+							  &connection, &ip, &username, &dst, &src);
 
 	switch (client_action)
 	{
